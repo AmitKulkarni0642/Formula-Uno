@@ -245,6 +245,34 @@ def _laps_frame(sid: str, laps: pd.DataFrame, driver_id_by_abbr: dict[str, str])
     return df
 
 
+def _lap_to_telemetry_df(lap) -> pd.DataFrame | None:
+    """Shared by the bulk fastest-lap pass (ingest.py) and the on-demand
+    single-lap fetch (src/compare/loader.py's lazy cache) — same shape either way."""
+    tel = lap.get_telemetry()
+    if tel is None or tel.empty or "Distance" not in tel.columns:
+        return None
+    tel = tel.sort_values("Distance").reset_index(drop=True)
+    lap_number = int(lap["LapNumber"]) if pd.notna(lap.get("LapNumber")) else None
+
+    t_ms = tel["Time"].apply(lambda td: _ms(td) or 0).to_numpy()
+    drs_raw = pd.to_numeric(tel.get("DRS", pd.Series(0, index=tel.index)), errors="coerce").fillna(0)
+
+    return pd.DataFrame({
+        "lap_number": lap_number,
+        "sample_idx": np.arange(len(tel)),
+        "t_ms": t_ms,
+        "distance_m": tel["Distance"].to_numpy(dtype=float),
+        "speed": pd.to_numeric(tel.get("Speed"), errors="coerce").to_numpy(dtype=float),
+        "throttle": pd.to_numeric(tel.get("Throttle"), errors="coerce").to_numpy(dtype=float),
+        "brake": tel.get("Brake", False).astype(bool).to_numpy(),
+        "gear": _nullable_int(tel.get("nGear", pd.Series(dtype=float))).to_numpy(),
+        "rpm": pd.to_numeric(tel.get("RPM"), errors="coerce").to_numpy(dtype=float),
+        "drs": (drs_raw >= 10).to_numpy(),  # FastF1 convention: 10/12/14 = DRS open
+        "x": pd.to_numeric(tel.get("X"), errors="coerce").to_numpy(dtype=float),
+        "y": pd.to_numeric(tel.get("Y"), errors="coerce").to_numpy(dtype=float),
+    })
+
+
 def _fastest_lap_telemetry(session, sid: str, driver_id_by_abbr: dict[str, str]):
     minisector_rows = []
     telemetry_files: list[tuple[int, str, pd.DataFrame]] = []
@@ -255,48 +283,48 @@ def _fastest_lap_telemetry(session, sid: str, driver_id_by_abbr: dict[str, str])
             lap = driver_laps.pick_fastest()
             if lap is None or pd.isna(lap.get("LapTime")):
                 continue
-            tel = lap.get_telemetry()
-            if tel is None or tel.empty or "Distance" not in tel.columns:
+            tel_df = _lap_to_telemetry_df(lap)
+            if tel_df is None:
                 continue
         except Exception:
             continue
 
-        tel = tel.sort_values("Distance").reset_index(drop=True)
-        lap_number = int(lap["LapNumber"]) if pd.notna(lap.get("LapNumber")) else None
-
-        t_ms = tel["Time"].apply(lambda td: _ms(td) or 0).to_numpy()
-        drs_raw = pd.to_numeric(tel.get("DRS", pd.Series(0, index=tel.index)), errors="coerce").fillna(0)
-
-        tel_df = pd.DataFrame({
-            "lap_number": lap_number,
-            "sample_idx": np.arange(len(tel)),
-            "t_ms": t_ms,
-            "distance_m": tel["Distance"].to_numpy(dtype=float),
-            "speed": pd.to_numeric(tel.get("Speed"), errors="coerce").to_numpy(dtype=float),
-            "throttle": pd.to_numeric(tel.get("Throttle"), errors="coerce").to_numpy(dtype=float),
-            "brake": tel.get("Brake", False).astype(bool).to_numpy(),
-            "gear": _nullable_int(tel.get("nGear", pd.Series(dtype=float))).to_numpy(),
-            "rpm": pd.to_numeric(tel.get("RPM"), errors="coerce").to_numpy(dtype=float),
-            "drs": (drs_raw >= 10).to_numpy(),  # FastF1 convention: 10/12/14 = DRS open
-            "x": pd.to_numeric(tel.get("X"), errors="coerce").to_numpy(dtype=float),
-            "y": pd.to_numeric(tel.get("Y"), errors="coerce").to_numpy(dtype=float),
-        })
         telemetry_files.append((did, tel_df))
-
-        minisector_rows.extend(_minisector_times(sid, did, lap_number, tel))
+        minisector_rows.extend(_minisector_times(sid, did, tel_df))
 
     minisectors_df = pd.DataFrame(minisector_rows) if minisector_rows else pd.DataFrame()
     return minisectors_df, telemetry_files
 
 
-def _minisector_times(sid: str, did: str, lap_number: int | None, tel: pd.DataFrame) -> list[dict]:
+def load_specific_lap_telemetry(season: int, round_number: int, code: str, driver_abbr: str, lap_number: int) -> pd.DataFrame:
+    """
+    On-demand fetch for one specific (non-fastest) lap — Phase 1 ingestion only
+    stores each driver's fastest lap; /compare_laps calls this for anything
+    else and the caller (src/compare/loader.py) writes the result back into
+    the same Parquet partition as a lazy cache.
+    """
+    session = fastf1.get_session(season, round_number, code)
+    session.load(telemetry=True, weather=False, messages=False, laps=True)
+    driver_laps = session.laps.pick_drivers(driver_abbr)
+    matching = driver_laps[driver_laps["LapNumber"] == lap_number]
+    if matching.empty:
+        raise ValueError(f"No lap {lap_number} for {driver_abbr} in {season} round {round_number} {code}")
+    lap = matching.iloc[0]
+    tel_df = _lap_to_telemetry_df(lap)
+    if tel_df is None:
+        raise ValueError(f"No telemetry available for {driver_abbr} lap {lap_number}")
+    return tel_df
+
+
+def _minisector_times(sid: str, did: str, tel_df: pd.DataFrame) -> list[dict]:
     """
     Cumulative elapsed time at 26 equal-distance checkpoints (0..lap length),
     by linear interpolation -> 25 per-segment durations. Approximate at ~4Hz
     sampling, same honesty caveat as the corner-segmentation in Phase 2.
     """
-    dist = tel["Distance"].to_numpy(dtype=float)
-    t = tel["Time"].apply(lambda td: td.total_seconds() if pd.notna(td) else np.nan).to_numpy()
+    lap_number = int(tel_df["lap_number"].iloc[0]) if len(tel_df) and pd.notna(tel_df["lap_number"].iloc[0]) else None
+    dist = tel_df["distance_m"].to_numpy(dtype=float)
+    t = tel_df["t_ms"].to_numpy(dtype=float) / 1000.0
     valid = ~np.isnan(dist) & ~np.isnan(t)
     dist, t = dist[valid], t[valid]
     if len(dist) < 2 or lap_number is None:

@@ -21,12 +21,21 @@ TELEMETRY_DIR = STORE_DIR / "telemetry"
 _SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
 
 
-def connect() -> duckdb.DuckDBPyConnection:
+def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    """
+    read_only=True lets the API serve from the store while a separate
+    ingestion process holds the write connection — DuckDB allows one writer
+    plus any number of read-only readers on the same file concurrently.
+    The API should always connect read_only; only ingest.py writes.
+    """
     STORE_DIR.mkdir(parents=True, exist_ok=True)
     TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(DB_PATH))
-    con.execute(_SCHEMA_SQL)
-    _refresh_telemetry_view(con)
+    con = duckdb.connect(str(DB_PATH), read_only=read_only)
+    if not read_only:
+        con.execute(_SCHEMA_SQL)
+        _refresh_telemetry_view(con)  # a view's query (incl. its glob) re-evaluates on
+        # every read, so a read-only connection sees new Parquet files automatically
+        # once the view exists — it never needs to (and, being read-only, can't) redefine it.
     return con
 
 
@@ -90,15 +99,25 @@ def upsert_rows(con: duckdb.DuckDBPyConnection, table: str, df: pd.DataFrame | N
     return len(df)
 
 
-def write_telemetry_parquet(session_id: str, event_id: str, code: str, driver_id: str, df: pd.DataFrame) -> Path:
+def write_telemetry_parquet(
+    session_id: str, event_id: str, code: str, driver_id: str, df: pd.DataFrame, file_stem: str | None = None,
+) -> Path:
     """
-    One Parquet file per driver, hive-partitioned by event_id/code so a
-    session's files can be deleted+rewritten as a unit (see delete_telemetry).
+    One Parquet file per driver (per lap, for a non-fastest lap fetched
+    on demand — see src/compare/loader.py), hive-partitioned by
+    event_id/code so a session's files can be deleted+rewritten as a unit
+    (see delete_telemetry).
+
+    `file_stem` only disambiguates the FILENAME when more than one lap for
+    the same driver is cached in one session (the bulk fastest-lap write
+    doesn't need it — one file per driver is already unique there). It must
+    never be used in place of `driver_id` for the content itself, or every
+    query that filters WHERE driver_id = ? silently stops matching that lap.
     """
     season, round_part = event_id.split("-")
     part_dir = TELEMETRY_DIR / f"season={season}" / f"event={round_part}" / f"session={code}"
     part_dir.mkdir(parents=True, exist_ok=True)
-    path = part_dir / f"{driver_id}.parquet"
+    path = part_dir / f"{file_stem or driver_id}.parquet"
     df.assign(session_id=session_id, driver_id=driver_id).to_parquet(path, index=False)
     return path
 
@@ -121,7 +140,11 @@ def log_ingest(con: duckdb.DuckDBPyConnection, session_id: str, step: str, statu
 
 
 def is_ingested(con: duckdb.DuckDBPyConnection, session_id: str, step: str) -> bool:
-    row = con.execute(
+    # fetchall(), not fetchone(): a result that isn't fully drained leaves the
+    # connection in a state where the NEXT execute()/register() call raises
+    # "Resource In Use Error: connection has an unfinished result" — hit this
+    # for real on the first backfill run (crashed on every season's 2nd event).
+    rows = con.execute(
         "SELECT status FROM ingest_log WHERE session_id = ? AND step = ?", [session_id, step]
-    ).fetchone()
-    return row is not None and row[0] == "ok"
+    ).fetchall()
+    return bool(rows) and rows[0][0] == "ok"

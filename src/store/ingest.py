@@ -73,8 +73,14 @@ def ingest_season(con, season: int, rounds: list[int] | None, sessions: list[str
         rounds = sorted(int(r) for r in sched["RoundNumber"] if r > 0)
 
     for round_number in rounds:
-        evt_frame = fastf1_src.load_event_frame(season, round_number)
-        db.upsert_rows(con, "events", evt_frame["row"], ["event_id"])
+        try:
+            evt_frame = fastf1_src.load_event_frame(season, round_number)
+            db.upsert_rows(con, "events", evt_frame["row"], ["event_id"])
+        except Exception as e:
+            print(f"  {ids.event_id(season, round_number):<16} <event load failed>              "
+                  f"failed: {type(e).__name__}: {e}")
+            continue  # one bad event can't abort the rest of the season
+
         event_name = evt_frame["row"].iloc[0]["name"]
 
         for code in sessions:

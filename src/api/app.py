@@ -19,6 +19,9 @@ from src.analytics.telemetry_compare import (
     compare_qualifying_laps, get_schedule, get_session_drivers,
     get_track_map as get_track_map_for_year,
 )
+from src.store import db
+from src.compare import loader
+from src.compare.service import compare_laps as run_lap_comparison
 
 app = FastAPI(
     title="Formula Uno API",
@@ -178,6 +181,47 @@ class TelemetryComparisonResponse(BaseModel):
     insights: list[str]
 
 
+class LapCompareSegment(BaseModel):
+    corner: Optional[int]
+    start_distance_m: float
+    end_distance_m: float
+    time_delta_s: float
+    braking_point_diff_m: Optional[float]
+    min_speed_diff_kmh: float
+    throttle_pickup_diff_m: float
+    exit_speed_diff_kmh: float
+    top_speed_diff_kmh: float
+    category: str
+
+
+class LapCompareMeta(BaseModel):
+    session_id: str
+    driver_a: str
+    lap_a: int
+    driver_b: str
+    lap_b: int
+    sample_rate_hz_approx: int
+    caveats: str
+
+
+class LapCompareResponse(BaseModel):
+    meta: LapCompareMeta
+    distance_m: list[float]
+    speed_a: list[float]
+    speed_b: list[float]
+    throttle_a: list[float]
+    throttle_b: list[float]
+    brake_a: list[bool]
+    brake_b: list[bool]
+    gear_a: list[float]
+    gear_b: list[float]
+    delta_ms: list[float]
+    total_delta_s: float
+    segments: list[LapCompareSegment]
+    insights: list[str]
+    minisector_winners: list[Optional[str]]
+
+
 # ---- Endpoints ----
 
 @app.get("/health")
@@ -303,3 +347,32 @@ def compare_qualifying(
                    f"at {event} {year} qualifying.",
         )
     return result
+
+
+@app.get("/compare_laps", response_model=LapCompareResponse)
+def compare_laps(
+    session_id: str = Query(..., description="e.g. '2024-01-Q' (season-round-code)"),
+    driver_a: str = Query(..., description="driver_id slug, e.g. 'max_verstappen' — see /schedule/{year}/{event}/drivers"),
+    driver_b: str = Query(..., description="driver_id slug, e.g. 'charles_leclerc'"),
+    lap_a: str = Query("fastest", description="'fastest' or a lap number"),
+    lap_b: str = Query("fastest", description="'fastest' or a lap number"),
+    resolution: int = Query(1, ge=1, le=20, description="Downsample stride for the display channels (1 = full resolution)"),
+):
+    """
+    Phase 2: store-backed lap comparison (any two laps, any driver pair, any
+    session already in the processed stats store) — distance-aligned speed/
+    throttle/brake/gear traces, a cumulative delta-time curve, corner-by-corner
+    segment breakdown, ranked plain-English insights, and mini-sector winners
+    for the track map. Distinct from /compare/qualifying (fastest-lap-only,
+    live FastF1, pre-dates the store).
+
+    A lap not yet in the store is fetched live from FastF1 on first request
+    and cached — expect that one call to be slower than the rest.
+    """
+    con = db.connect()
+    try:
+        return run_lap_comparison(con, session_id, driver_a, lap_a, driver_b, lap_b, resolution)
+    except loader.LapNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    finally:
+        con.close()
