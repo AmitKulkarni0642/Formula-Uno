@@ -106,6 +106,46 @@ export interface SessionDriver {
   code: string;
   name: string;
   team: string;
+  driver_id: string;
+}
+
+export interface RaceLapRow {
+  lap_number: number;
+  gap_s: number;
+  lap_time_a_s: number;
+  lap_time_b_s: number;
+  compound_a: string | null;
+  compound_b: string | null;
+  pit_lap_a: boolean;
+  pit_lap_b: boolean;
+  track_status: string | null;
+}
+
+export interface RaceStint {
+  stint: number;
+  compound: string | null;
+  lap_start: number;
+  lap_end: number;
+  lap_count: number;
+  avg_lap_s: number | null;
+}
+
+export interface LeadChange {
+  lap_number: number;
+  gap_s: number;
+}
+
+export interface RaceComparison {
+  session_id: string;
+  driver_a: string;
+  driver_b: string;
+  laps_compared: number;
+  laps_available: number[];
+  final_gap_s: number | null;
+  lead_changes: LeadChange[];
+  stints_a: RaceStint[];
+  stints_b: RaceStint[];
+  laps: RaceLapRow[];
 }
 
 export interface LapSegment {

@@ -15,6 +15,8 @@ import numpy as np
 import pandas as pd
 import fastf1
 
+from src.store import ids
+
 N_SAMPLES = 400  # distance-grid resolution for the resampled comparison
 
 
@@ -31,17 +33,29 @@ def get_schedule(year: int) -> list[dict]:
         return []
 
 
-def get_session_drivers(year: int, event: str) -> list[dict]:
+def get_session_drivers(year: int, event: str, session_type: str = "Q") -> list[dict]:
     """
-    The qualifying roster for one session — code/name/team — so the frontend can
+    The roster for one session — code/name/team/driver_id — so the frontend can
     offer only drivers who actually took part, instead of a free-text guess.
+    session_type: "Q" (qualifying, default) or "R" (race) — grid penalties aside,
+    these are almost always the same drivers, but a session can genuinely differ
+    (e.g. a reserve driver stepping in for the race only).
+
+    driver_id is the store's stable slug (src/store/ids.py) — the frontend needs
+    it to call /compare_laps and /compare_race, which key on driver_id rather
+    than the 3-letter code (which the store does not treat as a permanent id).
     """
     try:
-        session = fastf1.get_session(year, event, "Q")
+        session = fastf1.get_session(year, event, session_type)
         session.load(telemetry=False, laps=False, weather=False, messages=False)
         results = session.results
         return [
-            {"code": r["Abbreviation"], "name": r["FullName"], "team": r["TeamName"]}
+            {
+                "code": r["Abbreviation"],
+                "name": r["FullName"],
+                "team": r["TeamName"],
+                "driver_id": ids.driver_id(r["FullName"]),
+            }
             for _, r in results.iterrows()
         ]
     except Exception:

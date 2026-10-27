@@ -24,16 +24,22 @@ DEFAULT_SESSIONS = ["Q", "R"]
 
 
 def ingest_session(con, season: int, round_number: int, code: str, telemetry: str, force: bool) -> str:
+    """
+    The ingest_log step is the telemetry level itself ("none" or "fastest"),
+    not a single "all" flag — "fastest" is a strict superset of "none"'s data,
+    so a session ingested at "fastest" also counts as done for a "none"
+    request (see ensure_session), but not the other way round.
+    """
     evt_id = ids.event_id(season, round_number)
     sid = ids.session_id(evt_id, code)
 
-    if not force and db.is_ingested(con, sid, "all"):
+    if not force and db.is_ingested(con, sid, telemetry):
         return "skipped"
 
     try:
         frames = fastf1_src.load_session_frames(season, round_number, code, telemetry=telemetry)
     except Exception as e:
-        db.log_ingest(con, sid, "all", "failed", 0, error=f"{type(e).__name__}: {e}")
+        db.log_ingest(con, sid, telemetry, "failed", 0, error=f"{type(e).__name__}: {e}")
         return f"failed: {e}"
 
     db.upsert_rows(con, "drivers", frames["drivers"], ["driver_id"])
@@ -63,8 +69,33 @@ def ingest_session(con, season: int, round_number: int, code: str, telemetry: st
             frames["corners"],
         )
 
-    db.log_ingest(con, sid, "all", "ok", n_laps)
+    db.log_ingest(con, sid, telemetry, "ok", n_laps)
     return f"ok ({n_laps} laps, {len(frames['telemetry_files'])} telemetry traces)"
+
+
+def ensure_session(con, session_id: str, telemetry: str = "none") -> str:
+    """
+    Lazy, on-demand ingestion for the API: any session 2018-2026 the user
+    actually asks to compare gets pulled in on first request and cached
+    forever after, instead of requiring an exhaustive pre-backfill to cover
+    "all races so far". "fastest" already covers a "none" request, so that
+    doesn't trigger a redundant re-ingest; a "none"-only session upgrades to
+    "fastest" the first time something (e.g. /compare_laps) actually needs it.
+    """
+    if db.is_ingested(con, session_id, "fastest"):
+        return "already ingested"
+    if telemetry == "none" and db.is_ingested(con, session_id, "none"):
+        return "already ingested"
+
+    try:
+        season_str, round_str, code = session_id.split("-")
+        season, round_number = int(season_str), int(round_str)
+        evt_frame = fastf1_src.load_event_frame(season, round_number)
+    except Exception as e:
+        raise ValueError(f"Can't resolve session_id {session_id!r}: {type(e).__name__}: {e}")
+
+    db.upsert_rows(con, "events", evt_frame["row"], ["event_id"])
+    return ingest_session(con, season, round_number, code, telemetry, force=True)
 
 
 def ingest_season(con, season: int, rounds: list[int] | None, sessions: list[str], telemetry: str, force: bool):

@@ -20,6 +20,7 @@ from src.analytics.telemetry_compare import (
     get_track_map as get_track_map_for_year,
 )
 from src.store import db
+from src.store.ingest import ensure_session
 from src.compare import loader
 from src.compare.service import compare_laps as run_lap_comparison
 from src.compare.race import race_pace_comparison
@@ -157,6 +158,7 @@ class SessionDriver(BaseModel):
     code: str
     name: str
     team: str
+    driver_id: str
 
 
 class TelemetryComparisonResponse(BaseModel):
@@ -336,11 +338,12 @@ def schedule(year: int = Query(..., description="Season year, e.g. 2022")):
 def session_drivers(
     year: int = Query(..., description="Season year, e.g. 2022"),
     event: str = Query(..., description="Event name as returned by /schedule, e.g. 'British Grand Prix'"),
+    session_type: str = Query("Q", description="'Q' (qualifying, default) or 'R' (race)"),
 ):
-    """The qualifying roster for one event — only drivers who actually took part."""
-    drivers = get_session_drivers(year, event)
+    """The roster for one event's session — only drivers who actually took part."""
+    drivers = get_session_drivers(year, event, session_type)
     if not drivers:
-        raise HTTPException(status_code=404, detail=f"No qualifying roster found for {event} {year}.")
+        raise HTTPException(status_code=404, detail=f"No {session_type} roster found for {event} {year}.")
     return drivers
 
 
@@ -406,13 +409,14 @@ def compare_laps(
     for the track map. Distinct from /compare/qualifying (fastest-lap-only,
     live FastF1, pre-dates the store).
 
-    A lap not yet in the store is fetched live from FastF1 on first request
-    and cached — expect that one call to be slower than the rest.
+    A session not yet in the store (any season 2018-2026) is ingested on
+    first request and cached — expect that one call to be noticeably slower.
     """
     con = db.connect()
     try:
+        ensure_session(con, session_id, telemetry="fastest")
         return run_lap_comparison(con, session_id, driver_a, lap_a, driver_b, lap_b, resolution)
-    except loader.LapNotFound as e:
+    except (loader.LapNotFound, ValueError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     finally:
         con.close()
@@ -431,9 +435,13 @@ def compare_race(
     This is the "did the tyre offset work" story (e.g. 2019 Hungary: Hamilton's
     extra stop let him close in and pass Verstappen). Lap-level, not telemetry
     — see /compare_laps for a single lap's distance-aligned speed/throttle/brake.
+
+    A session not yet in the store (any season 2018-2026) is ingested on
+    first request (laps only, no telemetry — fast) and cached.
     """
     con = db.connect()
     try:
+        ensure_session(con, session_id, telemetry="none")
         return race_pace_comparison(con, session_id, driver_a, driver_b)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
