@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data: large/local-only, lives outside OneDrive from here on (see F1_CACHE_DIR/STORE_DIR)
+data/
+f1data/
+
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# stray nested-repo backup from folding web/ into the root repo
+web/.git.bak-create-next-app/
