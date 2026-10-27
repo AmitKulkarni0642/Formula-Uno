@@ -22,6 +22,7 @@ from src.analytics.telemetry_compare import (
 from src.store import db
 from src.compare import loader
 from src.compare.service import compare_laps as run_lap_comparison
+from src.compare.race import race_pace_comparison
 
 app = FastAPI(
     title="Formula Uno API",
@@ -222,6 +223,45 @@ class LapCompareResponse(BaseModel):
     minisector_winners: list[Optional[str]]
 
 
+class RaceLapComparisonRow(BaseModel):
+    lap_number: int
+    gap_s: float
+    lap_time_a_s: float
+    lap_time_b_s: float
+    compound_a: Optional[str]
+    compound_b: Optional[str]
+    pit_lap_a: bool
+    pit_lap_b: bool
+    track_status: Optional[str]
+
+
+class RaceStint(BaseModel):
+    stint: int
+    compound: Optional[str]
+    lap_start: int
+    lap_end: int
+    lap_count: int
+    avg_lap_s: Optional[float]
+
+
+class LeadChange(BaseModel):
+    lap_number: int
+    gap_s: float
+
+
+class RaceComparisonResponse(BaseModel):
+    session_id: str
+    driver_a: str
+    driver_b: str
+    laps_compared: int
+    laps_available: list[int]
+    final_gap_s: Optional[float]
+    lead_changes: list[LeadChange]
+    stints_a: list[RaceStint]
+    stints_b: list[RaceStint]
+    laps: list[RaceLapComparisonRow]
+
+
 # ---- Endpoints ----
 
 @app.get("/health")
@@ -373,6 +413,29 @@ def compare_laps(
     try:
         return run_lap_comparison(con, session_id, driver_a, lap_a, driver_b, lap_b, resolution)
     except loader.LapNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    finally:
+        con.close()
+
+
+@app.get("/compare_race", response_model=RaceComparisonResponse)
+def compare_race(
+    session_id: str = Query(..., description="e.g. '2019-12-R' (season-round-code); must be a race (R) session"),
+    driver_a: str = Query(..., description="driver_id slug, e.g. 'lewis_hamilton'"),
+    driver_b: str = Query(..., description="driver_id slug, e.g. 'max_verstappen'"),
+):
+    """
+    Whole-race, lap-by-lap gap evolution between two drivers — cumulative
+    time gap per lap (a broadcast "race trace" chart), pit stops, tyre
+    stints, and exactly which laps the on-track order between them flipped.
+    This is the "did the tyre offset work" story (e.g. 2019 Hungary: Hamilton's
+    extra stop let him close in and pass Verstappen). Lap-level, not telemetry
+    — see /compare_laps for a single lap's distance-aligned speed/throttle/brake.
+    """
+    con = db.connect()
+    try:
+        return race_pace_comparison(con, session_id, driver_a, driver_b)
+    except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     finally:
         con.close()
