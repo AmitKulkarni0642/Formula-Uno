@@ -1,9 +1,10 @@
+import os
 import warnings
 import logging
 import fastf1
 import pandas as pd
 
-CACHE_DIR = "data"
+from src.settings import settings
 
 # Quiet FastF1's noisy INFO/req/core logging and pandas FutureWarnings, so that
 # actual results are readable in the terminal instead of buried under log spam.
@@ -13,7 +14,8 @@ try:
 except Exception:
     logging.getLogger("fastf1").setLevel(logging.ERROR)
 
-fastf1.Cache.enable_cache(CACHE_DIR)
+os.makedirs(settings.f1_cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(settings.f1_cache_dir)
 
 
 def _load(year: int, event, session_type: str) -> dict:

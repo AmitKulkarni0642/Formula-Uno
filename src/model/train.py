@@ -6,8 +6,9 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 import pickle
 from pathlib import Path
 
+from src.settings import settings
 
-MODEL_DIR = Path("data/models")
+MODEL_DIR = Path(settings.model_dir)
 
 
 def train(df: pd.DataFrame, feature_cols: list[str], target_col: str) -> XGBRegressor:
