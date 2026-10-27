@@ -119,6 +119,8 @@ export interface RaceLapRow {
   pit_lap_a: boolean;
   pit_lap_b: boolean;
   track_status: string | null;
+  position_a: number | null;
+  position_b: number | null;
 }
 
 export interface RaceStint {

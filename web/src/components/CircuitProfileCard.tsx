@@ -3,6 +3,7 @@
 import { AnimatePresence, motion, type Variants } from "motion/react";
 import TrackMap from "./TrackMap";
 import type { CircuitProfile } from "@/lib/types";
+import { formatLapTime } from "@/lib/format";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -96,7 +97,7 @@ export default function CircuitProfileCard({
                 <Fact
                   label="Fastest race lap (2022–25)"
                   value={
-                    profile.fastest_race_lap ? `${profile.fastest_race_lap.time_s.toFixed(3)}s` : "—"
+                    profile.fastest_race_lap ? formatLapTime(profile.fastest_race_lap.time_s) : "—"
                   }
                   hint={
                     profile.fastest_race_lap
@@ -108,7 +109,7 @@ export default function CircuitProfileCard({
                   label="Fastest qualifying lap (2022–25)"
                   value={
                     profile.fastest_qualifying_lap
-                      ? `${profile.fastest_qualifying_lap.time_s.toFixed(3)}s`
+                      ? formatLapTime(profile.fastest_qualifying_lap.time_s)
                       : "—"
                   }
                   hint={

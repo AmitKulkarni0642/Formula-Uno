@@ -123,6 +123,28 @@ def test_stints_report_compound_and_pace_excluding_pit_laps(con):
     assert stints[1]["avg_lap_s"] == pytest.approx(88.25)  # pit lap (110.0) excluded
 
 
+def test_position_progression_passed_through_per_lap(con):
+    def _row(session_id, driver_id, lap_number, lap_s, position):
+        return {
+            "session_id": session_id, "driver_id": driver_id, "lap_number": lap_number,
+            "lap_ms": int(lap_s * 1000), "s1_ms": None, "s2_ms": None, "s3_ms": None,
+            "compound": "MEDIUM", "stint": 1, "tyre_life": None, "fresh_tyre": None,
+            "pit_in": False, "pit_out": False, "track_status": "1",
+            "is_deleted": False, "deleted_reason": None, "is_accurate": True,
+            "position": position, "session_time_ms": None, "air_temp": None, "track_temp": None, "rainfall": False,
+        }
+
+    # A overtakes B on lap 2: A goes P2->P1, B goes P1->P2.
+    a_rows = pd.DataFrame([_row("R", "a", 1, 90.0, 2), _row("R", "a", 2, 88.0, 1)])
+    b_rows = pd.DataFrame([_row("R", "b", 1, 90.0, 1), _row("R", "b", 2, 92.0, 2)])
+    db.replace_rows(con, "laps", {"session_id": "R", "driver_id": "a"}, a_rows)
+    db.replace_rows(con, "laps", {"session_id": "R", "driver_id": "b"}, b_rows)
+
+    result = race.race_pace_comparison(con, "R", "a", "b")
+    assert [r["position_a"] for r in result["laps"]] == [2, 1]
+    assert [r["position_b"] for r in result["laps"]] == [1, 2]
+
+
 def test_raises_for_unknown_driver(con):
     _insert_laps(con, "R", "a", [(1, 90.0, "MEDIUM", 1, False)])
     with pytest.raises(ValueError):

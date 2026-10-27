@@ -6,6 +6,7 @@ import { AnimatePresence, motion, type Variants } from "motion/react";
 import { ApiError, getCircuitProfile, getHealth, getQualifyingPrediction, getRacePrediction } from "@/lib/api";
 import type { Circuit, CircuitProfile, QualifyingPrediction, RacePrediction } from "@/lib/types";
 import CircuitProfileCard from "@/components/CircuitProfileCard";
+import { formatLapTime } from "@/lib/format";
 
 type Session = "race" | "qualifying";
 
@@ -418,8 +419,8 @@ function QualView({ data }: { data: QualifyingPrediction }) {
               <td className="py-1.5 pr-3 tabular-nums">P{r.pred_grid}</td>
               <td className="py-1.5 pr-3 font-medium">{r.driver}</td>
               <td className="py-1.5 pr-3 text-black/60 dark:text-white/60">{r.team}</td>
-              <td className="py-1.5 pr-3 tabular-nums">{r.predicted_time_s.toFixed(3)}</td>
-              <td className="py-1.5 pr-3 tabular-nums">{r.actual_time_s.toFixed(3)}</td>
+              <td className="py-1.5 pr-3 tabular-nums">{formatLapTime(r.predicted_time_s)}</td>
+              <td className="py-1.5 pr-3 tabular-nums">{formatLapTime(r.actual_time_s)}</td>
               <td className="py-1.5 pr-3 tabular-nums">P{r.actual_grid}</td>
               <td
                 className="py-1.5 pr-3 tabular-nums rounded transition-colors"

@@ -235,6 +235,8 @@ class RaceLapComparisonRow(BaseModel):
     pit_lap_a: bool
     pit_lap_b: bool
     track_status: Optional[str]
+    position_a: Optional[int]
+    position_b: Optional[int]
 
 
 class RaceStint(BaseModel):

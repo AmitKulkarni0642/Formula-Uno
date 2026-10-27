@@ -1,7 +1,8 @@
 """
 Lap-by-lap race-pace comparison for two drivers over a WHOLE race: cumulative
-gap evolution (who's ahead, by how much, and exactly when that flips), pit
-stops, and each driver's tyre strategy — the "did the tyre offset work"
+gap evolution (who's ahead, by how much, and exactly when that flips), each
+driver's actual running position per lap, pit stops, and tyre strategy —
+the "did the tyre offset work"
 story (e.g. 2019 Hungary: Hamilton's extra stop let him close in and pass
 Verstappen on fresher tyres). This is lap-level and race-long, not telemetry
 — the 4Hz speed/throttle/brake traces from Phase 2's /compare_laps are
@@ -90,6 +91,8 @@ def race_pace_comparison(con, session_id: str, driver_a: str, driver_b: str) -> 
             "pit_lap_a": bool(ra["pit_in"]) if pd.notna(ra["pit_in"]) else False,
             "pit_lap_b": bool(rb["pit_in"]) if pd.notna(rb["pit_in"]) else False,
             "track_status": ra["track_status"],
+            "position_a": int(ra["position"]) if pd.notna(ra["position"]) else None,
+            "position_b": int(rb["position"]) if pd.notna(rb["position"]) else None,
         })
 
     return {
