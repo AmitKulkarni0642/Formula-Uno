@@ -3,6 +3,7 @@
 export interface Circuit {
   key: string;
   label: string;
+  event: string;
 }
 
 export interface DriverResult {

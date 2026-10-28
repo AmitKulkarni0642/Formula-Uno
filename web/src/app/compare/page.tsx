@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ApiError, getQualifyingComparison, getRaceComparison, getSchedule, getSessionDrivers, getTrackMapForYear,
@@ -155,17 +154,9 @@ export default function ComparePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: EASE }}
       >
-        <p className="text-xs tracking-widest uppercase text-red-600 font-semibold mb-1">
-          Formula Uno
-        </p>
-        <div className="flex items-baseline justify-between flex-wrap gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            {sessionType === "Q" ? "Qualifying telemetry comparison" : "Race pace comparison"}
-          </h1>
-          <Link href="/" className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors">
-            ← Predictions
-          </Link>
-        </div>
+        <h1 className="text-3xl font-display font-bold tracking-tight">
+          {sessionType === "Q" ? "Qualifying telemetry comparison" : "Race pace comparison"}
+        </h1>
         <p className="text-sm text-black/50 dark:text-white/50 mt-1">
           {sessionType === "Q"
             ? "Any two drivers' fastest qualifying laps, aligned by distance — real telemetry, not a model prediction."
@@ -285,7 +276,7 @@ export default function ComparePage() {
             {trackMapLoading ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <motion.div
-                  className="h-10 w-10 rounded-full border-2 border-violet-400/25 border-t-violet-400"
+                  className="h-10 w-10 rounded-full border-2 border-accent/25 border-t-accent"
                   animate={{ rotate: 360 }}
                   transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
                 />
@@ -349,14 +340,14 @@ export default function ComparePage() {
       {qualData && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }}>
           <div className="flex items-center gap-3 mb-4 text-sm flex-wrap">
-            <span className="font-semibold" style={{ color: "#E10600" }}>
+            <span className="font-semibold text-driver-a">
               {qualData.driver_a}{" "}
               <span className="font-normal text-black/40 dark:text-white/40">
                 {qualData.position_a ? `(P${qualData.position_a})` : ""}
               </span>
             </span>
             <span className="text-black/40 dark:text-white/40">vs</span>
-            <span className="font-semibold" style={{ color: "#1F77B4" }}>
+            <span className="font-semibold text-driver-b">
               {qualData.driver_b}{" "}
               <span className="font-normal text-black/40 dark:text-white/40">
                 {qualData.position_b ? `(P${qualData.position_b})` : ""}
@@ -431,9 +422,9 @@ export default function ComparePage() {
       {raceData && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }}>
           <div className="flex items-center gap-3 mb-4 text-sm flex-wrap">
-            <span className="font-semibold" style={{ color: "#E10600" }}>{raceData.driver_a}</span>
+            <span className="font-semibold text-driver-a">{raceData.driver_a}</span>
             <span className="text-black/40 dark:text-white/40">vs</span>
-            <span className="font-semibold" style={{ color: "#1F77B4" }}>{raceData.driver_b}</span>
+            <span className="font-semibold text-driver-b">{raceData.driver_b}</span>
             {raceData.final_gap_s !== null && (
               <span className="text-black/50 dark:text-white/50">
                 — {raceData.final_gap_s > 0 ? raceData.driver_a : raceData.driver_b} ahead by{" "}

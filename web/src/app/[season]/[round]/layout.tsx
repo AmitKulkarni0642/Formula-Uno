@@ -11,7 +11,7 @@ import TrackMap from "@/components/TrackMap";
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 const TABS = [
-  { slug: "preview", label: "Preview", disabled: true },
+  { slug: "preview", label: "Preview", disabled: false },
   { slug: "quali", label: "Quali", disabled: false },
   { slug: "race", label: "Race", disabled: false },
   { slug: "review", label: "Review", disabled: true },
@@ -22,7 +22,7 @@ export default function EventLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const season = Number(params.season);
   const round = Number(params.round);
-  const activeTab = pathname.split("/")[3] ?? "quali";
+  const activeTab = pathname.split("/")[3] ?? "preview";
 
   const [event, setEvent] = useState<ScheduleEvent | null>(null);
   const [trackMap, setTrackMap] = useState<TrackMapData | null>(null);
@@ -63,23 +63,18 @@ export default function EventLayout({ children }: { children: React.ReactNode })
         transition={{ duration: 0.5, ease: EASE }}
       >
         <div>
-          <p className="text-xs tracking-widest uppercase text-accent font-semibold mb-1">
-            Formula Uno
-          </p>
-          <h1 className="text-3xl font-display font-bold tracking-tight">
+          <Link
+            href={`/${season}`}
+            className="text-xs uppercase tracking-wide text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors"
+          >
+            ← {season} season
+          </Link>
+          <h1 className="text-3xl font-display font-bold tracking-tight mt-1">
             {event ? event.name : `Round ${round}`}
           </h1>
           <p className="text-sm text-black/50 dark:text-white/50 mt-1">
             {season} · Round {round}{event ? ` · ${event.location}` : ""}
           </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link href={`/${season}`} className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors">
-            ← {season} season
-          </Link>
-          <Link href="/" className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors">
-            Predictions
-          </Link>
         </div>
       </motion.header>
 

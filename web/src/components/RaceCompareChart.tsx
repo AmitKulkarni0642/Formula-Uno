@@ -6,7 +6,7 @@ import { formatLapTime } from "@/lib/format";
 
 const COLOR_A = "#E10600";
 const COLOR_B = "#1F77B4";
-const GAP_COLOR = "#9333EA";
+const GAP_COLOR = "#A855F7";
 
 // Real F1 broadcast tyre-compound colors.
 const COMPOUND_COLORS: Record<string, string> = {

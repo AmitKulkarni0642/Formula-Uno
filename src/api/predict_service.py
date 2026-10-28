@@ -105,8 +105,13 @@ _combined_race_cache: dict = {}
 
 
 def available_circuits() -> list[dict]:
-    """List circuits the API can currently serve."""
-    return [{"key": k, "label": v["label"]} for k, v in CIRCUITS.items()]
+    """
+    List circuits the API can currently serve. `event` (the exact FastF1 event
+    name) lets a caller that only knows an event name — e.g. the event-page
+    Preview tab, which gets there via /schedule — look up whether a circuit
+    key, and therefore a prediction, exists for it at all.
+    """
+    return [{"key": k, "label": v["label"], "event": v["event"]} for k, v in CIRCUITS.items()]
 
 
 def _get_artifacts(circuit_key: str) -> dict:

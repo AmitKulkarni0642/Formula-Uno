@@ -19,9 +19,13 @@ const item: Variants = {
 export default function CircuitProfileCard({
   profile,
   loading,
+  showTrackMap = true,
 }: {
   profile: CircuitProfile | null;
   loading: boolean;
+  /** An event page already shows a full-size track map banner above this —
+   * skip the redundant thumbnail there instead of showing the same map twice. */
+  showTrackMap?: boolean;
 }) {
   return (
     <div className="mb-10 pb-8 border-b border-black/10 dark:border-white/10">
@@ -32,9 +36,9 @@ export default function CircuitProfileCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-6"
+            className={showTrackMap ? "grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-6" : undefined}
           >
-            <div className="aspect-square rounded-xl bg-black/5 dark:bg-white/5 animate-pulse" />
+            {showTrackMap && <div className="aspect-square rounded-xl bg-black/5 dark:bg-white/5 animate-pulse" />}
             <div className="space-y-3">
               <div className="h-5 w-56 rounded bg-black/5 dark:bg-white/5 animate-pulse" />
               <div className="h-3 w-full rounded bg-black/5 dark:bg-white/5 animate-pulse" />
@@ -47,19 +51,21 @@ export default function CircuitProfileCard({
             variants={container}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-6"
+            className={showTrackMap ? "grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-6" : undefined}
           >
-            <motion.div variants={item} className="aspect-square">
-              {profile.track_map ? (
-                <TrackMap points={profile.track_map} />
-              ) : (
-                <div className="w-full h-full rounded-xl border border-dashed border-black/15 dark:border-white/15 flex items-center justify-center text-xs text-black/40 dark:text-white/40 text-center p-4">
-                  Track map unavailable
-                  <br />
-                  (no mirrored telemetry)
-                </div>
-              )}
-            </motion.div>
+            {showTrackMap && (
+              <motion.div variants={item} className="aspect-square">
+                {profile.track_map ? (
+                  <TrackMap points={profile.track_map} />
+                ) : (
+                  <div className="w-full h-full rounded-xl border border-dashed border-black/15 dark:border-white/15 flex items-center justify-center text-xs text-black/40 dark:text-white/40 text-center p-4">
+                    Track map unavailable
+                    <br />
+                    (no mirrored telemetry)
+                  </div>
+                )}
+              </motion.div>
+            )}
 
             <div>
               <motion.h2 variants={item} className="text-lg font-semibold mb-1.5">

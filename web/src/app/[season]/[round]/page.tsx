@@ -6,5 +6,5 @@ export default async function EventPage({
   params: Promise<{ season: string; round: string }>;
 }) {
   const { season, round } = await params;
-  redirect(`/${season}/${round}/quali`);
+  redirect(`/${season}/${round}/preview`);
 }

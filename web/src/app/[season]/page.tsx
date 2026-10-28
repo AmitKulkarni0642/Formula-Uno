@@ -36,26 +36,16 @@ export default function SeasonPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: EASE }}
       >
-        <div>
-          <p className="text-xs tracking-widest uppercase text-accent font-semibold mb-1">
-            Formula Uno
-          </p>
-          <h1 className="text-3xl font-display font-bold tracking-tight">{season} season</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <select
-            className="rounded-lg border border-black/15 dark:border-white/15 bg-transparent px-3 py-1.5 text-sm"
-            value={season}
-            onChange={(e) => router.push(`/${e.target.value}`)}
-          >
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-          <Link href="/" className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors">
-            ← Predictions
-          </Link>
-        </div>
+        <h1 className="text-3xl font-display font-bold tracking-tight">{season} season</h1>
+        <select
+          className="rounded-lg border border-black/15 dark:border-white/15 bg-transparent px-3 py-1.5 text-sm"
+          value={season}
+          onChange={(e) => router.push(`/${e.target.value}`)}
+        >
+          {YEARS.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
       </motion.header>
 
       {error && (

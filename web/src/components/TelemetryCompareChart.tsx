@@ -75,7 +75,7 @@ export default function TelemetryCompareChart({ data }: { data: TelemetryCompari
 
       {
         name: "Delta", type: "line", xAxisIndex: 4, yAxisIndex: 4, showSymbol: false,
-        data: zip(distance_m, delta_time_s), color: "#9333EA", lineStyle: { width: 1.5 },
+        data: zip(distance_m, delta_time_s), color: "#A855F7", lineStyle: { width: 1.5 },
         areaStyle: { opacity: 0.08 }, markLine: { silent: true, symbol: "none", data: [{ yAxis: 0 }], lineStyle: { color: "#888", type: "dashed", width: 1 } },
       },
     ],
