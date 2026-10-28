@@ -101,12 +101,20 @@ export default function Home() {
               </AnimatePresence>
             </h1>
           </div>
-          <Link
-            href="/compare"
-            className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors mt-1"
-          >
-            Compare drivers →
-          </Link>
+          <div className="flex items-center gap-4 mt-1">
+            <Link
+              href="/2026"
+              className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors"
+            >
+              Browse seasons →
+            </Link>
+            <Link
+              href="/compare"
+              className="text-sm text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white transition-colors"
+            >
+              Compare drivers →
+            </Link>
+          </div>
         </div>
       </motion.header>
 
