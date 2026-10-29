@@ -181,7 +181,7 @@ if __name__ == "__main__":
     p.add_argument("--train-seasons", required=True, help="comma-separated, e.g. 2022,2023,2024")
     p.add_argument("--eval-seasons", required=True, help="comma-separated, e.g. 2025")
     p.add_argument("--history-start", type=int, default=None, help="defaults to min(train-seasons)")
-    p.add_argument("--epochs", type=int, default=80)
+    p.add_argument("--epochs", type=int, default=None, help="defaults to train_and_evaluate's own default (150)")
     args = p.parse_args()
 
     train_seasons = [int(s) for s in args.train_seasons.split(",")]
@@ -189,5 +189,6 @@ if __name__ == "__main__":
     history_start = args.history_start or min(train_seasons)
     session_type = "R" if args.session == "race" else "Q"
 
-    result = train_and_evaluate(session_type, train_seasons, eval_seasons, history_start, epochs=args.epochs)
+    kwargs = {"epochs": args.epochs} if args.epochs is not None else {}
+    result = train_and_evaluate(session_type, train_seasons, eval_seasons, history_start, **kwargs)
     print("\n", result)
