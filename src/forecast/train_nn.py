@@ -56,12 +56,15 @@ def train_and_evaluate(
     train_seasons: list[int],
     eval_seasons: list[int],
     history_start_season: int,
-    epochs: int = 80,
-    patience: int = 8,
-    lr: float = 1e-3,
-    batch_size: int = 4096,
+    epochs: int = 150,
+    patience: int = 20,
+    lr: float = 3e-4,
+    weight_decay: float = 1e-3,
+    batch_size: int = 1024,
     val_frac: float = 0.15,
     seed: int = 42,
+    hidden: tuple[int, ...] = (64, 32),
+    dropout: float = 0.35,
 ) -> dict:
     cont_cols = _continuous_cols(session_type)
 
@@ -105,8 +108,8 @@ def train_and_evaluate(
     y_tr_s, y_va_s = (y_tr - y_mean) / y_std, (y_va - y_mean) / y_std
 
     torch.manual_seed(seed)
-    model = LapTimeNet(n_continuous=len(cont_cols))
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    model = LapTimeNet(n_continuous=len(cont_cols), hidden=hidden, dropout=dropout)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     loss_fn = nn.HuberLoss(delta=1.0)
 
     n = len(tr_df)
@@ -159,6 +162,7 @@ def train_and_evaluate(
         "state_dict": best_state, "continuous_cols": cont_cols,
         "means": means, "stds": stds, "medians": medians,
         "y_mean": y_mean, "y_std": y_std,
+        "hidden": hidden, "dropout": dropout,
         "session_type": session_type, "train_seasons": train_seasons,
         "history_start_season": history_start_season,
     }

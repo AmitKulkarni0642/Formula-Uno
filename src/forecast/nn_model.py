@@ -25,8 +25,8 @@ class LapTimeNet(nn.Module):
         n_continuous: int,
         compound_dim: int = 4,
         era_dim: int = 3,
-        hidden: tuple[int, ...] = (128, 64, 32),
-        dropout: float = 0.2,
+        hidden: tuple[int, ...] = (64, 32),
+        dropout: float = 0.35,
     ):
         super().__init__()
         self.compound_emb = nn.Embedding(COMPOUND_CLASSES, compound_dim)
