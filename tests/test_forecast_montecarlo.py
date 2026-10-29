@@ -7,7 +7,7 @@ convention as the rest of this suite.
 import numpy as np
 import pandas as pd
 
-from src.forecast.montecarlo import simulate_positions, summarize
+from src.forecast.montecarlo import simulate_positions, summarize, _shrink_toward_pool
 
 
 def test_clearly_faster_driver_wins_every_trial_with_no_noise_no_dnf_no_sc():
@@ -54,6 +54,19 @@ def test_probabilities_sum_to_one_driver_across_the_field():
     summary = summarize(sims, grid={d: i + 1 for i, d in enumerate(pace)})
     assert abs(summary["win_prob"].sum() - 1.0) < 1e-9
     assert len(summary) == 10
+
+
+def test_shrinkage_pulls_a_small_sample_certainty_away_from_1_0():
+    # A circuit with only 4 historical races, all with a safety car, has a
+    # raw empirical rate of 1.0 -- but 4 samples isn't enough to call that
+    # genuine certainty. Shrinking toward a broader pooled rate must move it.
+    shrunk = _shrink_toward_pool(sample_rate=1.0, n=4, pooled_rate=0.5)
+    assert 0.5 < shrunk < 1.0
+
+
+def test_shrinkage_barely_moves_a_large_sample():
+    shrunk = _shrink_toward_pool(sample_rate=0.9, n=500, pooled_rate=0.5)
+    assert abs(shrunk - 0.9) < 0.01
 
 
 def test_safety_car_increases_variance_without_changing_pace_order_identity():

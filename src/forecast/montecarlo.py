@@ -66,28 +66,51 @@ def team_dnf_rates(recent_events: pd.DataFrame) -> tuple[dict[str, float], float
     df = pd.DataFrame(rows)
     overall = float(df["dnf"].mean())
     per_team = df.groupby("team")["dnf"].mean().to_dict()
-    # Shrink teams with few entries toward the grid average rather than trusting a noisy small sample.
     counts = df.groupby("team").size().to_dict()
-    shrunk = {
-        team: (rate * counts[team] + overall * 5) / (counts[team] + 5)
-        for team, rate in per_team.items()
-    }
+    # Shrink teams with few entries toward the grid average rather than trusting a noisy small sample.
+    shrunk = {team: _shrink_toward_pool(rate, counts[team], overall) for team, rate in per_team.items()}
     return shrunk, overall
 
 
-def safety_car_probability(circuit_events: pd.DataFrame) -> float:
-    """Fraction of this circuit's past races that had at least one SC/VSC period."""
-    had_sc = []
-    for _, ev in circuit_events.iterrows():
-        try:
-            laps = load_race(int(ev["Season"]), int(ev["Round"]))["laps"]
-        except Exception:
-            continue
-        if "TrackStatus" not in laps.columns:
-            continue
-        ts = laps["TrackStatus"].astype(str)
-        had_sc.append(bool((ts.str.contains("4") | ts.str.contains("6")).any()))
-    return float(np.mean(had_sc)) if had_sc else 0.3  # 0.3: a reasonable generic prior if no history at all
+def _race_had_sc(season: int, round_: int) -> bool | None:
+    try:
+        laps = load_race(season, round_)["laps"]
+    except Exception:
+        return None
+    if "TrackStatus" not in laps.columns:
+        return None
+    ts = laps["TrackStatus"].astype(str)
+    return bool((ts.str.contains("4") | ts.str.contains("6")).any())
+
+
+def _shrink_toward_pool(sample_rate: float, n: int, pooled_rate: float, pseudo_count: int = 5) -> float:
+    """Pure shrinkage math, split out so it's unit-testable without network."""
+    return float((sample_rate * n + pooled_rate * pseudo_count) / (n + pseudo_count))
+
+
+def safety_car_probability(circuit_events: pd.DataFrame, pooled_events: pd.DataFrame | None = None) -> float:
+    """
+    Fraction of this circuit's past races with at least one SC/VSC period,
+    shrunk toward a broader (pooled_events, e.g. recent seasons across every
+    circuit) rate -- same reason as team_dnf_rates' shrinkage: a circuit with
+    only 3-4 historical races can easily show an empirical rate of exactly
+    0.0 or 1.0 by chance, and treating that as genuine certainty would make
+    every single Monte Carlo trial either apply or skip the SC compression,
+    collapsing a real source of race-to-race variance into a non-variable.
+    """
+    had_sc = [_race_had_sc(int(ev["Season"]), int(ev["Round"])) for _, ev in circuit_events.iterrows()]
+    had_sc = [h for h in had_sc if h is not None]
+
+    pooled_rate = 0.5  # generic prior if there's truly nothing to pool from either
+    if pooled_events is not None and len(pooled_events):
+        pooled = [_race_had_sc(int(ev["Season"]), int(ev["Round"])) for _, ev in pooled_events.iterrows()]
+        pooled = [h for h in pooled if h is not None]
+        if pooled:
+            pooled_rate = float(np.mean(pooled))
+
+    if not had_sc:
+        return pooled_rate
+    return _shrink_toward_pool(float(np.mean(had_sc)), len(had_sc), pooled_rate)
 
 
 def pit_loss_estimate(circuit_events: pd.DataFrame) -> float:
