@@ -184,7 +184,7 @@ Typed client generated from FastAPI's OpenAPI schema (`openapi-typescript`), one
 - track features: power sensitivity, overtaking difficulty, degradation severity (computed from the store);
 - era, compound, tyre life, fuel, temperatures, session stage.
 
-XGBoost stays the learner, so the core technique is unchanged; what changes is features and scope.
+**Superseded 29 Oct 2026 (new decision, D1-b):** XGBoost is being replaced, not kept. User's call, having seen the tradeoffs (LightGBM/CatBoost stay in the tree-ensemble family and inherit XGBoost's inability to extrapolate past training ranges; a probabilistic GBM mitigates but doesn't escape it) — a tabular MLP (PyTorch) instead, the only option that doesn't inherit trees' extrapolation ceiling. Higher lift (needs real scaling/regularization/training-loop work, more overfitting risk at this dataset size) but that's the explicit tradeoff being made. See `src/forecast/nn_model.py`, `src/forecast/train_nn.py`.
 
 **Monte Carlo race simulator (`src/forecast/montecarlo.py`)**: vectorised NumPy, not per-lap `model.predict` (the current engine calls predict per driver per lap, which would take hours for thousands of runs). Precompute each driver's pace curve over compound x tyre age x fuel once, then simulate N=5,000 races with stochastic SC/VSC (per-track historical rates), pit timing from a strategy model, DNFs (per-team reliability prior), start-position effects and an overtaking cost from the track feature. Outputs: win/podium/points probabilities, expected position, stop count and pit windows. Two stages: post-practice and post-quali.
 

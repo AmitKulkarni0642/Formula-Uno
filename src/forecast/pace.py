@@ -24,7 +24,7 @@ from src.store.ids import team_lineage_id
 WET_COMPOUNDS = ("INTERMEDIATE", "WET")
 
 
-def _clean_laps(laps: pd.DataFrame) -> pd.DataFrame:
+def clean_laps(laps: pd.DataFrame) -> pd.DataFrame:
     """Same honesty filter as the old build_features: dry, accurate, timed laps."""
     laps = laps.copy()
     laps["s"] = laps["LapTime"].dt.total_seconds()
@@ -54,7 +54,7 @@ def session_pace(year: int, event, session_type: str) -> pd.DataFrame:
     """
     loader = load_race if session_type == "R" else load_qualifying
     data = loader(year, event)
-    laps = _clean_laps(data["laps"])
+    laps = clean_laps(data["laps"])
     if laps.empty:
         return pd.DataFrame(columns=["Driver", "Team", "driver_median_s", "gap_to_fastest_s", "teammate_gap_s"])
 
