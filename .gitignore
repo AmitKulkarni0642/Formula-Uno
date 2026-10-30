@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Local Claude Code settings — machine-specific, not project config
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # Data: large/local-only, lives outside OneDrive from here on (see F1_CACHE_DIR/STORE_DIR)
 data/
 f1data/
