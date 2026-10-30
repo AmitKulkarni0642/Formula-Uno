@@ -1,26 +1,62 @@
 # Formula Uno
 
-An F1 analytics and prediction platform: a FastAPI backend (FastF1-sourced data,
-DuckDB/Parquet stats store, PyTorch forecasting models, Monte Carlo race
-simulation) behind a Next.js frontend.
+An F1 analytics and race-forecasting platform: FastF1-sourced data flowing
+through a DuckDB/Parquet stats store into a PyTorch forecasting model and a
+Monte Carlo race simulator, served by FastAPI and a Next.js frontend.
 
-The project has two generations of "prediction" living side by side, and they
-are not the same thing:
+The core engineering problem: go from "replay a race that already happened"
+to "forecast a race that hasn't" — without quietly leaking the answer into
+the input. Most of the interesting work in this repo is the discipline
+around that distinction. See [Highlights](#highlights) below, and
+[`PLAN.md`](PLAN.md) / [`PROGRESS.md`](PROGRESS.md) for the full design
+history and build log.
 
-- **Reconstruction engine** (`/predict/race`, `/predict/qualifying`) — the
-  original per-circuit XGBoost models. They use information from the session
-  they're "predicting" (real pit laps, real grid position), so they replay a
-  known race rather than forecast an unknown one. Kept working, clearly
-  labelled, not removed.
-- **Forecast engine** (`src/forecast/`) — a global PyTorch model trained once
-  across every circuit/era, plus a Monte Carlo race simulator. This is a
-  genuine forecast: for a future event it only ever sees data from before that
-  event (rolling "as-of" features, no leakage), and it outputs a probability
-  distribution over finishing order, not a single deterministic guess.
+---
 
-See [`PLAN.md`](PLAN.md) and [`PROGRESS.md`](PROGRESS.md) for the full design
-history and a phase-by-phase log of what was built, why, and what broke along
-the way.
+## Highlights
+
+- **Leakage-safe forecasting, not replay.** A global PyTorch model (one
+  network, every circuit and era) predicts lap time using only rolling
+  `shift(1)`-EWM features computed *as of* the event — an event's own result
+  can never leak into its own prediction. The old per-circuit XGBoost engine
+  predicted qualifying using the actual race grid position, which is
+  basically the answer; the new engine doesn't have that feature at all.
+- **Validated honestly.** Trained on 2022-2024, evaluated on a 2025 holdout
+  the model never saw: **race RMSE 3.45s / MAE 2.85s**, **qualifying RMSE
+  4.57s / MAE 3.24s** — matching ten separate per-circuit specialist models
+  with one general one. Validation is split by *event*, not by random lap,
+  specifically to avoid mixing laps from the same race into train and test.
+- **Forecasts a distribution, not a guess.** A 5,000-trial vectorized Monte
+  Carlo simulation turns one pace prediction per driver into a full
+  probability distribution over finishing order — stop-count, DNF rate,
+  safety-car probability, pit loss, and lap noise are all measured from real
+  historical data, not assumed.
+- **Caught and fixed its own overconfidence.** Mexico City's small sample of
+  historical races (4) all happened to have a safety car, giving a naive
+  empirical probability of exactly 1.0. Fixed with Bayesian shrinkage toward
+  a pooled rate (0.84, not 1.0) rather than trusting a 4-race sample as
+  certainty — with a dedicated test proving the shrinkage behaves correctly
+  at both small and large sample sizes.
+- **Forecasts the weather, not just the race.** For a session that hasn't
+  happened yet, air temperature comes from a real forecast (Open-Meteo), and
+  track temperature from a circuit-specific historical offset — tested
+  against a naive cross-circuit regression first, and replaced only after
+  that regression was shown empirically too weak (residual std ~8.8°C).
+
+---
+
+## Two engines, by design
+
+| | Reconstruction (legacy) | Forecast (active) |
+|---|---|---|
+| Models | One XGBoost regressor per circuit | One PyTorch MLP, global across circuits/eras |
+| Input | The real session's own data (actual pit laps, actual grid) | Only data from *before* the event |
+| Output | One deterministic guess | A probability distribution (Monte Carlo) |
+| Endpoints | `/predict/race`, `/predict/qualifying` | `forecast_event()` — API endpoint not yet wired up |
+| Status | Frozen, kept working, clearly labelled as a replay | Active development |
+
+Both are kept in the repo on purpose, clearly separated — see
+[`STRUCTURE.md`](STRUCTURE.md) for exactly which files belong to which.
 
 ---
 
@@ -28,7 +64,7 @@ the way.
 
 | Layer | Tech |
 |---|---|
-| Data source | [FastF1](https://docs.fastf1.dev/) 3.9 (requires an F1TV subscription for full 2018-2026 telemetry) |
+| Data source | [FastF1](https://docs.fastf1.dev/) 3.9 (F1TV subscription needed for full 2018-2026 telemetry) |
 | Processed store | DuckDB + Parquet |
 | Reconstruction models | XGBoost (per-circuit) |
 | Forecast model | PyTorch tabular MLP, trained globally across circuits/eras |
@@ -71,7 +107,7 @@ npm install
 
 ## Running it
 
-Everything backend-side goes through `run.py`:
+Everything backend-side goes through `run.py` for the legacy engine:
 
 ```bash
 python run.py list                      # circuits/examples available to the old engine
@@ -81,12 +117,12 @@ python run.py benchmark                  # compare model families on the same da
 python run.py api                        # start the FastAPI server (:8000, /docs for Swagger)
 ```
 
-Forecast engine (new global model), via its own CLI entry points:
+The forecast engine has its own CLI entry points:
 
 ```bash
 python -m src.forecast.train_nn --session-type R --train-seasons 2022 2023 2024
 python -m src.forecast.train_nn --session-type Q --train-seasons 2022 2023 2024
-python -m src.forecast.forecast_event --season 2026 --round 19   # live Mexico City GP forecast
+python -m src.forecast.forecast_event --season 2026 --round 19   # live forecast for a given event
 ```
 
 Frontend:
@@ -104,9 +140,10 @@ npm run dev          # http://localhost:3000
 pytest
 ```
 
-All tests are synthetic/offline (no network calls) — they check the math
-(leakage-safe rolling features, Monte Carlo correctness, shrinkage statistics,
-weather-combination logic) in isolation from FastF1 or any live API.
+All tests are synthetic/offline — no network calls. They check the math
+(leakage-safe rolling features, Monte Carlo correctness, shrinkage
+statistics, weather-combination logic) in isolation from FastF1 or any live
+API, the same discipline the forecast engine itself follows.
 
 ---
 
@@ -117,45 +154,34 @@ src/
   ingestion/     FastF1 session loading (race + qualifying, per-lap weather)
   store/         DuckDB + Parquet processed stats store, ID/lineage mapping
   features/      Feature engineering for the old per-circuit models
-  model/         XGBoost training + benchmarking (old reconstruction engine)
-  engine/        Deterministic race-replay engine (old reconstruction engine)
+  model/         XGBoost training + benchmarking (legacy reconstruction engine)
+  engine/        Deterministic race-replay engine (legacy reconstruction engine)
   analytics/     Comparison, qualifying, development, telemetry analytics
   compare/       Lap/race comparison service
-  forecast/      New global forecast engine: pace/track rolling features,
-                 PyTorch MLP, weather forecasting, live snapshots, Monte
-                 Carlo race simulation, end-to-end event orchestration
+  forecast/      Forecast engine: pace/track rolling features, PyTorch MLP,
+                 weather forecasting, live snapshots, Monte Carlo race
+                 simulation, end-to-end event orchestration
   api/           FastAPI app exposing both engines
 web/             Next.js frontend
 tests/           pytest suite (offline/synthetic)
 ```
 
-For a full file-by-file breakdown of what lives where (and why), see
-[`STRUCTURE.md`](STRUCTURE.md).
+Full file-by-file breakdown: [`STRUCTURE.md`](STRUCTURE.md).
 
 ---
 
-## Status
+## Status / what's next
 
-Phase 4 (replacing the per-circuit XGBoost reconstruction with a global,
-genuinely-forecasting model) is complete for both halves of its scope:
+Forecast engine is complete for both halves of its initial scope: validated
+against a true 2025 holdout, and proven end-to-end on a live, upcoming event.
 
-1. **Validation** — trained on 2022-2024, evaluated on held-out 2025: race
-   RMSE 3.45s / MAE 2.85s, qualifying RMSE 4.57s / MAE 3.24s — in the same
-   range as the old per-circuit specialists, despite one model now covering
-   every circuit and era instead of ten.
-2. **Live forecasting** — an end-to-end forecast for an upcoming event (grid
-   prediction + 5,000-trial Monte Carlo race simulation, using real
-   historical strategy/DNF/safety-car statistics and a genuine weather
-   forecast rather than recorded data), verified against the upcoming Mexico
-   City GP.
-
-Known, named simplifications (not hidden): pit strategy/compound choice is a
-fixed heuristic rather than a learned model; qualifying-gap spread looks
-narrower than typical real-world variance; each live forecast call currently
+Named, not hidden, simplifications: pit strategy/compound choice is a fixed
+heuristic rather than a learned model; qualifying-gap spread looks narrower
+than typical real-world variance; each live forecast call currently
 re-sweeps historical data independently rather than sharing one load pass,
 so it's slow (dominated by a flaky third-party API FastF1 falls back around,
 not application logic) but fine for occasional use.
 
 Not yet built: `/predict_quali` / `/predict_race` API endpoints for the
 forecast engine, frontend wiring for live forecasts, a formal backtests
-module, and a persisted-predictions table. Phase 5 (chat) is deferred.
+module, and a persisted-predictions table.
