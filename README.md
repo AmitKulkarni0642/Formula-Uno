@@ -129,6 +129,9 @@ web/             Next.js frontend
 tests/           pytest suite (offline/synthetic)
 ```
 
+For a full file-by-file breakdown of what lives where (and why), see
+[`STRUCTURE.md`](STRUCTURE.md).
+
 ---
 
 ## Status
